@@ -22,13 +22,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0 
+        fetch-depth: 0
 
     - name: Git identity for tagging
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
 
     - name: Detect tag on HEAD
       id: headtag
@@ -46,7 +45,6 @@ jobs:
       if: steps.headtag.outputs.tag != ''
       run: echo "new-tag=${{ steps.headtag.outputs.tag }}" >> $GITHUB_OUTPUT
 
-    # единый шаг, чтобы получить итоговый тег вне зависимости от ветки логики
     - name: Resolve tag for this run
       id: tag
       run: |
@@ -66,13 +64,6 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Release new version (semver)
-      id: release
-      run: bash ./scripts/git_update.sh -v patch
-
-    - name: Add app version
-      run: echo ${{ steps.release.outputs.new-tag }} > app/src/version.txt
-
     - name: Normalize ECR repository name (lowercase)
       id: repo
       run: |
@@ -84,6 +75,7 @@ jobs:
       run: |
         aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
         aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+
     - name: Go tidy
       run: |
         cd app/src
