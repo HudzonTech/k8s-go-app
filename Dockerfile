@@ -1,7 +1,7 @@
 # Build stage
 FROM golang:1.25.3-alpine AS builder
 WORKDIR /app
-COPY app/src/go.mod app/src/go.sum ./
+COPY app/src/go.mod .
 RUN go mod tidy && go mod download
 COPY app/src/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
