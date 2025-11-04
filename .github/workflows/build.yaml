@@ -2,7 +2,7 @@ name: Build and Push App to ECR
 
 env:
   AWS_REGION: us-east-1
-  AWS_IAM_ROLE: arn:aws:iam::424432388155:role/github-actions
+  AWS_IAM_ROLE: arn:aws:iam::251950841878:role/IODC-for-ERC-FULL
 
 on:
   push:
