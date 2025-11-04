@@ -1,0 +1,24 @@
+name: CI Lint
+
+on:
+  pull_request:
+  push:
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  lint-no-cyrillic-and-emoji:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.14.0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir regex
+
+      - name: Run Cyrillic/Emoji Linter
+        run: python3 scripts/lint.py .
