@@ -15,10 +15,11 @@ if [[ -z "${CURRENT_VERSION}" ]]; then
 fi
 echo "Current Version: ${CURRENT_VERSION}"
 
-PARTS=(${CURRENT_VERSION//./ })
-MAJOR=${PARTS[0]#v}
-MINOR=${PARTS[1]}
-PATCH=${PARTS[2]}
+CURRENT_VERSION=${CURRENT_VERSION:-v0.1.0}
+ver_no_v=${CURRENT_VERSION#v}
+IFS='.' read -r MAJOR MINOR PATCH <<EOF
+$ver_no_v
+EOF
 
 case "$VERSION" in
   major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
