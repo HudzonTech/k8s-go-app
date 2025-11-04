@@ -9,9 +9,9 @@ env:
 
 jobs:
   lint-no-cyrillic-and-emoji:
-    runs-on: python:3.14.0
+    runs-on: ubuntu-latest
     container:
-      image: ghcr.io/dubovsky-andrey/k8s-ubuntu:latest
+      image: python:3.14.0
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
