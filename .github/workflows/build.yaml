@@ -29,6 +29,32 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+
+    - name: Detect tag on HEAD
+      id: headtag
+      run: |
+        tag=$(git describe --tags --exact-match 2>/dev/null || true)
+        echo "tag=${tag}" >> $GITHUB_OUTPUT
+
+    - name: Release new version (semver)
+      id: release
+      if: steps.headtag.outputs.tag == '' && github.run_attempt == 1
+      run: bash ./scripts/git_update.sh -v patch
+
+    - name: Reuse existing tag on rerun
+      id: reuse
+      if: steps.headtag.outputs.tag != ''
+      run: echo "new-tag=${{ steps.headtag.outputs.tag }}" >> $GITHUB_OUTPUT
+
+    # единый шаг, чтобы получить итоговый тег вне зависимости от ветки логики
+    - name: Resolve tag for this run
+      id: tag
+      run: |
+        echo "val=${{ steps.release.outputs.new-tag || steps.reuse.outputs.new-tag }}" >> $GITHUB_OUTPUT
+
+    - name: Add app version
+      run: echo ${{ steps.tag.outputs.val }} > app/src/version.txt
+
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v5
       with:
@@ -58,6 +84,15 @@ jobs:
       run: |
         aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
         aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+    - name: Go tidy
+      run: |
+        cd app/src
+        go mod tidy
+
+    - name: Go test
+      run: |
+        cd app/src
+        go test -v ./...
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -74,12 +109,10 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ steps.repo.outputs.name }}
-        IMAGE_TAG: ${{ steps.release.outputs.new-tag }}
+        IMAGE_TAG: ${{ steps.tag.outputs.val }}
       run: |
         docker buildx build \
           --cache-from type=local,src=/tmp/.buildx-cache \
           --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
           -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
           --push .
-        rm -rf /tmp/.buildx-cache
-        mv /tmp/.buildx-cache-new /tmp/.buildx-cache

@@ -33,6 +33,7 @@ echo "($VERSION) updating ${CURRENT_VERSION} to ${NEW_TAG}"
 GIT_COMMIT=$(git rev-parse HEAD)
 if git describe --contains "$GIT_COMMIT" >/dev/null 2>&1; then
   echo "Already a tag on this commit"
+  NEW_TAG="$CURRENT_VERSION"
 else
   git tag "${NEW_TAG}"
   git push --tags
