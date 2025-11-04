@@ -16,5 +16,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir regex
+
       - name: Run Cyrillic/Emoji Linter
         run: python3 scripts/lint.py .
