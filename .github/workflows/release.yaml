@@ -12,7 +12,7 @@ on:
           - patch
           - minor
           - major
-          
+
       aws_region:
         description: 'AWS Region for ECR/Deploy'
         required: true
@@ -114,8 +114,8 @@ jobs:
           ${{ steps.login-ecr.outputs.registry }}/${{ steps.repo.outputs.name }}:${{ steps.sha.outputs.val }}
         build-args: |
           VERSION=${{ steps.tag.outputs.val }}
-        cache-from: type:gha
-        cache-to: type:gha,mode=max
+        cache-from: "type=gha"
+        cache-to: "type=gha,mode=max"
 
   wait-for-approval:
     runs-on: ubuntu-latest
