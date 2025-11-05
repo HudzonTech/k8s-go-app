@@ -2,10 +2,11 @@
 FROM golang:1.25.3-alpine AS builder
 WORKDIR /app
 ARG VERSION
-COPY app/src/go.mod .
-RUN go mod tidy && go mod download
+COPY app/src/go.mod app/src/go.sum* ./
+RUN go mod download
 COPY app/src/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'main.Version=$VERSION'" -o main .
+RUN go mod tidy \
+    && CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'main.Version=$VERSION'" -o main .
 
 # Final stage
 FROM alpine:3.22.2
