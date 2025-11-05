@@ -12,22 +12,36 @@ on:
           - patch
           - minor
           - major
+          
       aws_region:
-        description: 'AWS Region to deploy to'
+        description: 'AWS Region for ECR/Deploy'
         required: true
-        type: string
+        type: choice
         default: 'us-east-1'
+        options:
+          - us-east-1
+          - us-west-2
+          - eu-central-1
 
 concurrency:
   group: ecr-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: write
+    
+
+    outputs:
+      IMAGE_TAG: ${{ steps.tag.outputs.val }}
+      ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      ECR_REPOSITORY: ${{ steps.repo.outputs.name }}
+      SHORT_SHA: ${{ steps.sha.outputs.val }}
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -100,5 +114,24 @@ jobs:
           ${{ steps.login-ecr.outputs.registry }}/${{ steps.repo.outputs.name }}:${{ steps.sha.outputs.val }}
         build-args: |
           VERSION=${{ steps.tag.outputs.val }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: type:gha
+        cache-to: type:gha,mode=max
+
+  wait-for-approval:
+    runs-on: ubuntu-latest
+    
+    needs: build-and-push 
+
+    environment:
+      name: production 
+
+    steps:
+      - name: 'Workflow Paused: Waiting for Approval'
+        run: |
+          echo "Build complete. Waiting for manual approval to proceed."
+          echo "Selected Region: ${{ github.event.inputs.aws_region }}"
+          echo "Image to deploy: ${{ needs.build-and-push.outputs.ECR_REGISTRY }}/${{ needs.build-and-push.outputs.ECR_REPOSITORY }}:${{ needs.build-and-push.outputs.IMAGE_TAG }}"
+
+      - name: 'Approval received!'
+        run: |
+          echo "Approval received. Proceeding to the next job (if any)."
