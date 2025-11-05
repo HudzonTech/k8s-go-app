@@ -6,9 +6,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
+
+var Version = "unknown"
 
 type HealthResponse struct {
 	Status    string `json:"status"`
@@ -21,12 +22,15 @@ type HelloResponse struct {
 }
 
 func readVersion() string {
-	data, err := os.ReadFile("version.txt")
-	if err != nil {
-		return "unknown"
+	if v := os.Getenv("VERSION"); v != "" {
+		return v
 	}
-	return strings.TrimSpace(string(data))
+	if Version != "" {
+		return Version
+	}
+	return "unknown"
 }
+
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
