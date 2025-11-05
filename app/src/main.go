@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
 )
+
+var Version = "unknown"
 
 type HealthResponse struct {
 	Status    string `json:"status"`
@@ -20,12 +24,21 @@ type HelloResponse struct {
 	Message string `json:"message"`
 }
 
-func readVersion() string {
-	data, err := os.ReadFile("version.txt")
-	if err != nil {
-		return "unknown"
+func encodeResponse(w http.ResponseWriter, r *http.Request, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("ERROR: failed to encode JSON response for %s: %v", r.URL.Path, err)
 	}
-	return strings.TrimSpace(string(data))
+}
+
+func readVersion() string {
+	if v := os.Getenv("VERSION"); v != "" {
+		return v
+	}
+	if Version != "" {
+		return Version
+	}
+	return "unknown"
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -38,8 +51,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		Version:   readVersion(),
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	encodeResponse(w, r, resp) // 
 }
 
 func versionHandler(w http.ResponseWriter, r *http.Request) {
@@ -47,8 +59,7 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"version":%q}`, readVersion())
+	encodeResponse(w, r, map[string]string{"version": readVersion()}) // 
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
@@ -58,16 +69,45 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().Format("15:04:05")
 	resp := HelloResponse{Message: fmt.Sprintf("Hello World. Now time is %s", now)}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	encodeResponse(w, r, resp) 
 }
 
 func main() {
-	http.HandleFunc("/", rootHandler)
-	http.HandleFunc("/health", healthHandler)
-	http.HandleFunc("/version", versionHandler)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", rootHandler)
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/version", versionHandler)
 
 	port := ":8080"
-	log.Printf("Server starting on %s", port)
-	log.Fatal(http.ListenAndServe(port, nil))
+
+	server := &http.Server{
+		Addr:         port,
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,  
+		WriteTimeout: 10 * time.Second, 
+		IdleTimeout:  15 * time.Second, 
+	}
+
+
+	go func() {
+		log.Printf("Server starting on %s", port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("could not listen on %s: %v\n", port, err)
+		}
+	}()
+
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-stopChan
+	log.Println("Shutdown signal received, starting graceful shutdown...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server exiting")
 }

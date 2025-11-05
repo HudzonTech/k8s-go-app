@@ -1,0 +1,95 @@
+name: Manual Release and Push to ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Release type (major, minor, or patch)?'
+        required: true
+        type: choice
+        default: 'patch'
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: ecr-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Git identity for tagging
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+    - name: Release new version (semver)
+      id: release
+      run: bash ./scripts/git_update.sh -v ${{ github.event.inputs.version_bump }}
+
+    - name: Resolve tag for this run
+      id: tag
+      run: |
+        echo "val=${{ steps.release.outputs.new-tag }}" >> $GITHUB_OUTPUT
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v5
+      with:
+        audience: sts.amazonaws.com
+        aws-region: ${{ secrets.AWS_REGION }}
+        role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Normalize ECR repository name (lowercase)
+      id: repo
+      run: |
+        echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+    - name: Ensure ECR repository exists
+      env:
+        ECR_REPOSITORY: ${{ steps.repo.outputs.name }}
+      run: |
+        aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
+        aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+
+    - name: Go tidy
+      run: |
+        cd app/src
+        go mod tidy
+
+    - name: Go test
+      run: |
+        cd app/src
+        go test -v ./...
+
+    - name: Define SHORT_SHA
+      id: sha
+      run: echo "val=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+    - name: Build and push (Modern Way)
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/${{ steps.repo.outputs.name }}:${{ steps.tag.outputs.val }}
+          ${{ steps.login-ecr.outputs.registry }}/${{ steps.repo.outputs.name }}:latest
+          ${{ steps.login-ecr.outputs.registry }}/${{ steps.repo.outputs.name }}:${{ steps.sha.outputs.val }}
+        build-args: |
+          VERSION=${{ steps.tag.outputs.val }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
